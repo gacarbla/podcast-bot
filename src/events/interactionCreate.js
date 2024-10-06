@@ -1,6 +1,6 @@
 // /src/events/interactionCreate.js
 import manageAutocomplete from '../autocompletes/manage.js';
-import prisma from '../database/prismaClient.js';
+import podcastAutocomplete from '../autocompletes/podcast.js'
 
 export const name = 'interactionCreate';
 export const once = false;
@@ -19,6 +19,8 @@ export async function execute(interaction, client) {
     } else if (interaction.isAutocomplete()) {
         if (interaction.commandName === 'manage') {
             await manageAutocomplete(interaction, client);
+        } else if (interaction.commandName === 'podcast') {
+            await podcastAutocomplete(interaction, client)
         }
     }
 }

@@ -12,35 +12,56 @@ const manageCommand = {
                 .setDescription('Comandos para gestionar podcasts')
                 .addSubcommand(sub =>
                     sub
-                        .setName('create')
-                        .setDescription('Crea un nuevo podcast')
+                        .setName('add')
+                        .setDescription('Crea un nuevo podcast en el servidor')
                         .addChannelOption(option =>
-                            option.setName('stage_channel')
-                                .setDescription('Canal de stage asociado')
+                            option.setName('stage')
+                                .setNameLocalizations({
+                                    "es-ES": "escenario",
+                                    "es-419": "escenario"
+                                })
+                                .setDescription('Canal de escenario asociado')
                                 .setRequired(true)
-                                .addChannelTypes(13) // 13 es el tipo para Stage Channels
+                                .addChannelTypes(13)
                         )
                         .addChannelOption(option =>
-                            option.setName('text_channel')
+                            option.setName('chat')
                                 .setDescription('Canal de texto para la audiencia')
                                 .setRequired(true)
-                                .addChannelTypes(0) // 0 es el tipo para Text Channels
+                                .addChannelTypes(0)
+                        )
+                        .addRoleOption(option =>
+                            option.setName('role')
+                                .setNameLocalizations({
+                                    "es-ES": "rol",
+                                    "es-419": "rol"
+                                })
+                                .setDescription('Rol que identifica a la audiencia')
+                                .setRequired(true)
                         )
                         .addChannelOption(option =>
-                            option.setName('logs_channel')
-                                .setDescription('Canal opcional para logs')
+                            option.setName('logs')
+                                .setDescription('Canal opcional para registrar los logs del podcast')
                                 .setRequired(false)
                                 .addChannelTypes(0)
                         )
                         .addChannelOption(option =>
-                            option.setName('announcements_channel')
-                                .setDescription('Canal opcional para anuncios')
+                            option.setName('announcements')
+                                .setNameLocalizations({
+                                    "es-ES": "anuncios",
+                                    "es-419": "anuncios"
+                                })
+                                .setDescription('Canal opcional para anuncios, pings, etc...')
                                 .setRequired(false)
                                 .addChannelTypes(0)
                         )
                         .addChannelOption(option =>
-                            option.setName('warnings_channel')
-                                .setDescription('Canal opcional para advertencias de tiempo')
+                            option.setName('contact')
+                                .setNameLocalizations({
+                                    "es-ES": "advertencias",
+                                    "es-419": "advertencias"
+                                })
+                                .setDescription('Canal opcional para comunicarse con los podcasters en caso de ser requerido')
                                 .setRequired(false)
                                 .addChannelTypes(0)
                         )
@@ -72,20 +93,21 @@ const manageCommand = {
     /**
      * @param { ChatInputCommandInteraction } interaction
      */
-    async execute(interaction, client) {
+    async execute(interaction) {
         const subcommand = interaction.options.getSubcommand();
         const guildId = interaction.guildId;
         const guild = interaction.guild;
 
-        if (subcommand === 'create') {
+        if (subcommand === 'add') {
 
 
             // Obtener canales
-            const stageChannel = interaction.options.getChannel('stage_channel');
-            const textChannel = interaction.options.getChannel('text_channel');
-            const logsChannel = interaction.options.getChannel('logs_channel');
-            const announcementsChannel = interaction.options.getChannel('announcements_channel');
-            const warningsChannel = interaction.options.getChannel('warnings_channel');
+            const stageChannel = interaction.options.getChannel('stage');
+            const textChannel = interaction.options.getChannel('chat');
+            const logsChannel = interaction.options.getChannel('logs');
+            const announcementsChannel = interaction.options.getChannel('announcements');
+            const warningsChannel = interaction.options.getChannel('contact');
+            const audienceRole = interaction.options.getRole('role')
 
             // Asegurarse de que los canales existen en la base de datos
             const channelsToUpsert = [
@@ -132,7 +154,7 @@ const manageCommand = {
                     guild: {
                         connect: { discordId: guildId },
                     },
-                    // Si es necesario, conecta también los canales relacionados
+                    audienceRoleId: audienceRole.id,
                     stageChannel: {
                         connect: { discordId: stageChannel.id },
                     },
@@ -148,7 +170,6 @@ const manageCommand = {
                     logsChannel: logsChannel ? {
                         connect: { discordId: logsChannel.id }
                     } : undefined
-                    // Añade conexiones para timeLogsChannel y announcementChannel si corresponden
                 },
             });
 
@@ -190,7 +211,7 @@ const manageCommand = {
                             },
                         });
                     });
-                
+
                     // Esperar a que todas las promesas se resuelvan
                     await Promise.all(promises);
 
@@ -241,7 +262,7 @@ const manageCommand = {
                 return interaction.reply({ content: 'El podcast no existe.', ephemeral: true });
             }
 
-            if (podcast.status == "ACTIVE") return interaction.reply({content: "No se puede eliminar un podcast activo", ephemeral: true})
+            if (podcast.status == "ACTIVE") return interaction.reply({ content: "No se puede eliminar un podcast activo", ephemeral: true })
 
             let podcasters = podcast.podcasters.length > 0 ? "<@" + podcast.podcasters.map(e => `${e.discordId}`).join("> <@") + ">" : "*No designados*"
 
@@ -319,7 +340,7 @@ const manageCommand = {
             // Mostrar embed de confirmación
             const embed = new EmbedBuilder()
                 .setTitle(`Eliminar Podcast`)
-                .setDescription('Estás viendo la configuración del podcast.\nSi quieres modificar alguno de los ajustes,\nselecciona el botón con el mismo icono.\n'+ ((podcast.status == "ACTIVE") ? "Espera a que el podcast termine para desbloquear todos los ajustes." : ""))
+                .setDescription('Estás viendo la configuración del podcast.\nSi quieres modificar alguno de los ajustes,\nselecciona el botón con el mismo icono.\n' + ((podcast.status == "ACTIVE") ? "Espera a que el podcast termine para desbloquear todos los ajustes." : ""))
                 .addFields([
                     { name: "ID", value: `\`#${podcast.id}\``, inline: true },
                     { name: "Canal de podcast", value: `<#${podcast.stageChannelId}>`, inline: true },
@@ -327,9 +348,9 @@ const manageCommand = {
                         name: "Podcasters",
                         value: podcasters
                     },
-                    { name: "Logs", value: podcast.logsChannelId?`<#${podcast.logsChannelId}>`:"*Sin especificar*", inline: true },
-                    { name: "Tiempo", value: podcast.timeLogsChannelId?`<#${podcast.timeLogsChannelId}>`:"*Sin especificar*", inline: true },
-                    { name: "Anuncios", value: podcast.announcementChannelId?`<#${podcast.announcementChannelId}>`:"*Sin especificar*", inline: true }
+                    { name: "Logs", value: podcast.logsChannelId ? `<#${podcast.logsChannelId}>` : "*Sin especificar*", inline: true },
+                    { name: "Tiempo", value: podcast.timeLogsChannelId ? `<#${podcast.timeLogsChannelId}>` : "*Sin especificar*", inline: true },
+                    { name: "Anuncios", value: podcast.announcementChannelId ? `<#${podcast.announcementChannelId}>` : "*Sin especificar*", inline: true }
                 ]);
 
             const editUsersButton = new ButtonBuilder()
