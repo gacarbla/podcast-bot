@@ -1,0 +1,56 @@
+datasource db {
+  provider = "mysql" // Ajusta el proveedor si usas otro
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  discordId    String    @unique
+  podcasterAt  Podcast[] @relation("ManagedPodcasts") // Solo el nombre de la relación
+  hosting      Podcast?   @relation("Hosting") // Relación uno a uno
+}
+
+model Server {
+  id        Int       @id @default(autoincrement())
+  discordId String    @unique
+  podcasts  Podcast[] @relation("ServerPodcasts")
+}
+
+model Podcast {
+  id                Int       @id @default(autoincrement())
+  guildId           String
+  guild             Server    @relation("ServerPodcasts", fields: [guildId], references: [discordId], onDelete: Cascade)
+  podcasters        User[]     @relation("ManagedPodcasts")
+  stageChannelId    String
+  stageChannel      Channel   @relation("StageChannel", fields: [stageChannelId], references: [discordId], onDelete: Cascade)
+  chatChannelId     String
+  chatChannel       Channel   @relation("ChatChannel", fields: [chatChannelId], references: [discordId], onDelete: Cascade)
+  timeLogsChannelId String?
+  timeLogsChannel   Channel?   @relation("TimeLogsChannel", fields: [timeLogsChannelId], references: [discordId], onDelete: Cascade)
+  announcementChannelId String?
+  announcementChannel Channel? @relation("AnnouncementChannel", fields: [announcementChannelId], references: [discordId], onDelete: Cascade)
+  logsChannelId     String?
+  logsChannel       Channel?   @relation("LogsChannel", fields: [logsChannelId], references: [discordId], onDelete: Cascade)
+  status            PodcastSatus @default(INACTIVE)
+  currentHosterId   String?    @unique // Asegura que sea una relación uno a uno
+  currentHoster     User?      @relation("Hosting", fields: [currentHosterId], references: [discordId])
+}
+
+model Channel {
+  id        Int       @id @default(autoincrement())
+  discordId String    @unique
+  podcastsStage       Podcast[] @relation("StageChannel")
+  podcastsChat        Podcast[] @relation("ChatChannel")
+  podcastsTimeLogs    Podcast[] @relation("TimeLogsChannel")
+  podcastsLogs        Podcast[] @relation("LogsChannel")
+  podcastsAnnouncement Podcast[] @relation("AnnouncementChannel")
+}
+
+enum PodcastSatus {
+  ACTIVE
+  INACTIVE
+}
