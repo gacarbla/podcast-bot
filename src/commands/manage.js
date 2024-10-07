@@ -496,7 +496,7 @@ async function updateToChangePodcasters(interaction, podcastId, client) {
             ]);
 
         const addPodcastersSelect = new UserSelectMenuBuilder()
-            .setCustomId('add_podcasters')
+            .setCustomId('add_podcasters_'+Math.floor(Math.random()*100))
             .setPlaceholder('Selecciona podcasters para añadir')
             .setMinValues(1)
             .setMaxValues(maxToAdd);
@@ -514,7 +514,7 @@ async function updateToChangePodcasters(interaction, podcastId, client) {
             }));
 
             const removePodcastersSelect = new StringSelectMenuBuilder()
-                .setCustomId('remove_podcasters')
+                .setCustomId('remove_podcasters_'+Math.floor(Math.random()*100))
                 .setPlaceholder('Selecciona podcasters para eliminar')
                 .setMaxValues(podcastersCount)
                 .addOptions(options);
@@ -534,10 +534,10 @@ async function updateToChangePodcasters(interaction, podcastId, client) {
             const selectedUsers = i.values;
             const updateData = { where: { id: podcast.id }, data: { podcasters: {} } };
 
-            if (i.customId === 'add_podcasters') {
+            if (i.customId.startsWith('add_podcasters')) {
                 await Promise.all(selectedUsers.map(id => prisma.user.upsert({ where: { discordId: id }, update: {}, create: { discordId: id } })));
                 updateData.data.podcasters.connect = selectedUsers.map(discordId => ({ discordId }));
-            } else if (i.customId === 'remove_podcasters') {
+            } else if (i.customId.startsWith('remove_podcasters')) {
                 updateData.data.podcasters.disconnect = selectedUsers.map(discordId => ({ discordId }));
             }
 
