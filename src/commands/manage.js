@@ -80,11 +80,73 @@ const manageCommand = {
                 )
                 .addSubcommand(sub =>
                     sub
-                        .setName('edit')
-                        .setDescription('Edita un podcast existente')
+                        .setName('info')
+                        .setDescription('Obtén la información de un podcast')
+                        .addStringOption(option =>
+                            option.setName('podcast')
+                                .setDescription('Selecciona el podcast a visualizar')
+                                .setAutocomplete(true)
+                                .setRequired(true)
+                        )
+                )
+                .addSubcommand(sub =>
+                    sub
+                        .setName('channels')
+                        .setDescription('Obtén, edita o elimina configuraciones de canales')
                         .addStringOption(option =>
                             option.setName('podcast')
                                 .setDescription('Selecciona el podcast a editar')
+                                .setAutocomplete(true)
+                                .setRequired(true)
+                        )
+                        .addStringOption(option =>
+                            option.setName('action')
+                                .setNameLocalizations({
+                                    "es-ES": "acción",
+                                    "es-419": "acción"
+                                })
+                                .setDescription('¿Qué acción quieres llevar a cabo?')
+                                .setAutocomplete(true)
+                                .setRequired(true)
+                        )
+                        .addStringOption(option =>
+                            option.setName('channel')
+                                .setNameLocalizations({
+                                    "es-ES": "canal",
+                                    "es-419": "canal"
+                                })
+                                .setDescription('Indica el canal deseado')
+                                .setAutocomplete(true)
+                                .setRequired(true)
+                        )
+                )
+                .addSubcommand(sub =>
+                    sub
+                        .setName('podcasters')
+                        .setDescription('Obtén, edita o elimina configuraciones de podcasters')
+                        .addStringOption(option =>
+                            option.setName('podcast')
+                                .setDescription('Selecciona el podcast a editar')
+                                .setAutocomplete(true)
+                                .setRequired(true)
+                        )
+                        .addStringOption(option =>
+                            option.setName('action')
+                                .setNameLocalizations({
+                                    "es-ES": "acción",
+                                    "es-419": "acción"
+                                })
+                                .setDescription('¿Qué acción quieres llevar a cabo?')
+                                .setAutocomplete(true)
+                                .setRequired(true)
+                        )
+                        .addStringOption(option =>
+                            option.setName('target')
+                                .setNameLocalizations({
+                                    "es-ES": "objetivo",
+                                    "es-419": "objetivo"
+                                })
+                                .setDescription('Indica el usuario o rol deseado')
                                 .setAutocomplete(true)
                                 .setRequired(true)
                         )
@@ -319,7 +381,7 @@ const manageCommand = {
                 }
             });
 
-        } else if (subcommand === 'edit') {
+        } else if (subcommand === 'info') {
             const podcastId = interaction.options.getString('podcast', true);
 
             const podcast = await prisma.podcast.findFirst({
@@ -329,7 +391,10 @@ const manageCommand = {
                     stageChannelId: true,
                     stageChannel: true,
                     podcasters: true,
-                    status: true
+                    status: true,
+                    logsChannelId: true,
+                    timeLogsChannelId: true,
+                    announcementChannelId: true
                 }
             });
 
@@ -340,215 +405,25 @@ const manageCommand = {
             const currentPodcasters = podcast.podcasters.map(p => p.discordId);
             const podcastersCount = currentPodcasters.length;
 
-            const maxToAdd = 25 - podcastersCount;
-
             // Mostrar embed de confirmación
             const embed = new EmbedBuilder()
-                .setTitle(`Eliminar Podcast`)
+                .setTitle(`Información del Podcast`)
                 .setDescription('Estás viendo la configuración del podcast.\nSi quieres modificar alguno de los ajustes, selecciona el botón con el mismo icono.\n\n' + ((podcast.status != PodcastSatus.INACTIVE) ? "Espera a que el podcast termine para desbloquear todos los ajustes." : ""))
                 .addFields([
                     { name: "ID", value: `\`#${podcast.id}\``, inline: true },
                     { name: "Canal de podcast", value: `<#${podcast.stageChannelId}>`, inline: true },
                     { name: "** **", value: "** **" },
-                    { name: 'Podcasters actuales', value: currentPodcasters.length > 0 ? `<@${currentPodcasters.join('> <@')}>` : '*No hay podcasters asignados*', inline: true },
-                    { name: 'Número de podcasters', value: `${podcastersCount} / 25`, inline: true },
+                    { name: "Podcasters actuales", value: currentPodcasters.length ? `<@${currentPodcasters.join('> <@')}>` : '*No hay podcasters asignados*', inline: true },
+                    { name: "Número de podcasters", value: `${podcastersCount} / 25`, inline: true },
                     { name: "** **", value: "** **" },
                     { name: "Logs", value: podcast.logsChannelId ? `<#${podcast.logsChannelId}>` : "*Sin especificar*", inline: true },
                     { name: "Tiempo", value: podcast.timeLogsChannelId ? `<#${podcast.timeLogsChannelId}>` : "*Sin especificar*", inline: true },
                     { name: "Anuncios", value: podcast.announcementChannelId ? `<#${podcast.announcementChannelId}>` : "*Sin especificar*", inline: true }
                 ]);
 
-            const editUsersButton = new ButtonBuilder()
-                .setCustomId('edit_users')
-                .setLabel('Editar Podcasters')
-                .setStyle(ButtonStyle.Primary);
-
-            const editStageButton = new ButtonBuilder()
-                .setCustomId('edit_channels')
-                .setLabel('Editar Canales asignados')
-                .setDisabled(podcast.status != PodcastSatus.INACTIVE)
-                .setStyle(ButtonStyle.Primary);
-
-            const editChatButton = new ButtonBuilder()
-                .setCustomId('edit_chat')
-                .setLabel('Editar Canal de Chat')
-                .setDisabled(podcast.status != PodcastSatus.INACTIVE)
-                .setStyle(ButtonStyle.Primary);
-
-            // Puedes agregar más botones para otros atributos
-
-            const row = new ActionRowBuilder().addComponents(editUsersButton, editStageButton, editChatButton);
-
-            await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
-
-            // Manejar las interacciones de los botones
-            const filter = (i) => i.user.id === interaction.user.id;
-            const collector = interaction.channel.createMessageComponentCollector({ filter, time: 240000 });
-
-            collector.on('collect', async (i) => {
-                if (i.customId === 'edit_users') {
-                    updateToChangePodcasters(interaction, podcast.id, client)
-                    collector.stop()
-                } else if (i.customId === 'edit_channels') {
-                    // Lógica para editar el canal de stage
-                    await i.update({ content: 'Función para editar canales aún no implementada.', components: [], embeds: [] });
-                    collector.stop();
-                } else if (i.customId === 'edit_chat') {
-                    // Lógica para editar el canal de chat
-                    await i.update({ content: 'Función para editar canal de chat aún no implementada.', components: [], embeds: [] });
-                    collector.stop();
-                }
-            });
-
-            collector.on('end', async (collected, reason) => {
-                if (reason === 'time') {
-                    await interaction.editReply({
-                        content: 'El tiempo para responder ha expirado.',
-                        components: [
-                            new ActionRowBuilder().addComponents(
-                                editUsersButton.setDisabled(true),
-                                editStageButton.setDisabled(true),
-                                editChatButton.setDisabled(true)
-                            )
-                        ]
-                    });
-                }
-            });
+            await interaction.reply({ embeds: [embed] })
         }
-    },
-
-    // Autocompletado para seleccionar podcasts existentes
-    async autocomplete(interaction) {
-        const focusedValue = interaction.options.getFocused();
-        const guildId = interaction.guildId;
-
-        const podcasts = await prisma.podcast.findMany({
-            where: {
-                guildId,
-                name: {
-                    contains: focusedValue,
-                    mode: 'insensitive',
-                },
-            },
-            take: 25,
-        });
-
-        const choices = podcasts.map(podcast => ({
-            name: podcast.name,
-            value: podcast.name,
-        }));
-
-        await interaction.respond(choices);
     },
 };
-
-/**
- * Función para actualizar el mensaje con los podcasters actuales.
- * @param {ChatInputCommandInteraction} interaction
- * @param {number} podcastId
- * @param {Client} client
- */
-async function updateToChangePodcasters(interaction, podcastId, client) {
-    try {
-        await interaction.editReply({ content: "Cargando..." });
-
-        const podcast = await prisma.podcast.findFirst({
-            where: { id: podcastId },
-            select: {
-                id: true,
-                stageChannelId: true,
-                podcasters: {
-                    select: { discordId: true }
-                },
-                status: true,
-                logsChannelId: true,
-                timeLogsChannelId: true,
-                announcementChannelId: true
-            }
-        });
-
-        if (!podcast) throw new Error("Podcast no encontrado");
-
-        const currentPodcasters = podcast.podcasters.map(p => p.discordId);
-        const podcastersCount = currentPodcasters.length;
-        const maxToAdd = 25 - podcastersCount;
-
-        const embed = new EmbedBuilder()
-            .setTitle("Eliminar Podcast")
-            .setDescription(
-                `Estás viendo la configuración del podcast.\n` +
-                `Si quieres modificar alguno de los ajustes, selecciona el botón con el mismo icono.\n\n` +
-                `**ATENCIÓN:** Discord no detecta los cambios de este mensaje. Aunque todo funcione indicará que hubo un fallo al cambiar los usuarios. No es problema del bot, no podemos solucionarlo.\n\n`+
-                (podcast.status !== PodcastSatus.INACTIVE
-                    ? "Espera a que el podcast termine para desbloquear todos los ajustes."
-                    : "")
-            )
-            .addFields([
-                { name: "ID", value: `\`#${podcast.id}\``, inline: true },
-                { name: "Canal de podcast", value: `<#${podcast.stageChannelId}>`, inline: true },
-                { name: "** **", value: "** **" },
-                { name: "Podcasters actuales", value: currentPodcasters.length ? `<@${currentPodcasters.join('> <@')}>` : '*No hay podcasters asignados*', inline: true },
-                { name: "Número de podcasters", value: `${podcastersCount} / 25`, inline: true },
-                { name: "** **", value: "** **" },
-                { name: "Logs", value: podcast.logsChannelId ? `<#${podcast.logsChannelId}>` : "*Sin especificar*", inline: true },
-                { name: "Tiempo", value: podcast.timeLogsChannelId ? `<#${podcast.timeLogsChannelId}>` : "*Sin especificar*", inline: true },
-                { name: "Anuncios", value: podcast.announcementChannelId ? `<#${podcast.announcementChannelId}>` : "*Sin especificar*", inline: true }
-            ]);
-
-        const addPodcastersSelect = new UserSelectMenuBuilder()
-            .setCustomId('add_podcasters_'+Math.floor(Math.random()*100))
-            .setPlaceholder('Selecciona podcasters para añadir')
-            .setMinValues(1)
-            .setMaxValues(maxToAdd);
-
-        const components = [new ActionRowBuilder().addComponents(addPodcastersSelect)];
-
-        if (podcastersCount > 0) {
-            const options = await Promise.all(currentPodcasters.map(async p => {
-                const name = await fetchUsername(client, p);
-                return {
-                    label: `@${name}`,
-                    description: `${p}`,
-                    value: `${p}`
-                };
-            }));
-
-            const removePodcastersSelect = new StringSelectMenuBuilder()
-                .setCustomId('remove_podcasters_'+Math.floor(Math.random()*100))
-                .setPlaceholder('Selecciona podcasters para eliminar')
-                .setMaxValues(podcastersCount)
-                .addOptions(options);
-
-            components.push(new ActionRowBuilder().addComponents(removePodcastersSelect));
-        }
-
-        const replyContent = `Actualizado <t:${Math.floor(Date.now() / 1000)}:R>`;
-        await interaction.editReply({ content: replyContent, embeds: [embed], components });
-
-        const collector = interaction.channel.createMessageComponentCollector({
-            filter: i => i.user.id === interaction.user.id,
-            time: 240000
-        });
-
-        collector.on('collect', async i => {
-            const selectedUsers = i.values;
-            const updateData = { where: { id: podcast.id }, data: { podcasters: {} } };
-
-            if (i.customId.startsWith('add_podcasters')) {
-                await Promise.all(selectedUsers.map(id => prisma.user.upsert({ where: { discordId: id }, update: {}, create: { discordId: id } })));
-                updateData.data.podcasters.connect = selectedUsers.map(discordId => ({ discordId }));
-            } else if (i.customId.startsWith('remove_podcasters')) {
-                updateData.data.podcasters.disconnect = selectedUsers.map(discordId => ({ discordId }));
-            }
-
-            await prisma.podcast.update(updateData);
-            await updateToChangePodcasters(interaction, podcast.id, client);
-            collector.resetTimer();
-        });
-    } catch (error) {
-        console.error("Error al actualizar podcasters:", error);
-        await interaction.editReply({ content: "Error al actualizar podcasters. Intenta nuevamente." });
-    }
-}
 
 export default manageCommand
