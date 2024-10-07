@@ -1,6 +1,8 @@
 import { SlashCommandBuilder, ButtonBuilder, ActionRowBuilder } from '@discordjs/builders';
 import prisma, { PodcastSatus } from '../database/prismaClient.js';
 import { ChatInputCommandInteraction, PermissionFlagsBits, ButtonStyle } from 'discord.js';
+import send from '../utils/send.js';
+import podcast_times from '../utils/times.js';
 
 const podcastCommand = {
     data: new SlashCommandBuilder()
@@ -61,7 +63,7 @@ const podcastCommand = {
         const podcasters = podcast.podcasters
         if (podcasters.length > 0) {
             let idmap = podcasters.map(p => p.discordId)
-            if (!interaction.member.permissions.has(PermissionFlagsBits.ManageMessages && PermissionFlagsBits.MuteMembers) && !idmap.includes(userId))
+            if (!interaction.member.permissions.has(PermissionFlagsBits.ManageMessages) && !idmap.includes(userId))
                 return await interaction.reply({ content: "No puedes alterar el estado de un podcast si no eres podcaster o moderador.", ephemeral: true })
         }
 
@@ -75,12 +77,13 @@ const podcastCommand = {
                 })
 
                 const blockbutton = new ButtonBuilder()
-                .setCustomId('block_chat')
-                .setLabel('Bloquear')
-                .setStyle(ButtonStyle.Primary);
+                    .setCustomId('block_chat')
+                    .setLabel('Bloquear')
+                    .setStyle(ButtonStyle.Primary);
 
                 if (!response || response.status != PodcastSatus.PAUSED) return error(interaction)
-                await interaction.reply({ content: "El podcast se ha pausado. ¿Quieres bloquear el chat temporalmente?", ephemeral: true, components: [new ActionRowBuilder().addComponents(blockbutton)] })
+                send.log(podcast, "status", `Podcast #${podcast.id} pausado`, `<@${interaction.user.id}> ha pausado el podcast`, interaction.guild)
+                await interaction.reply({ content: "El podcast  se ha pausado. ¿Quieres bloquear el chat temporalmente?", ephemeral: true, components: [new ActionRowBuilder().addComponents(blockbutton)] })
 
                 // Esperar la interacción del usuario
                 const filter = (i) => i.user.id === interaction.user.id;
@@ -89,6 +92,7 @@ const podcastCommand = {
                 collector.on('collect', async (i) => {
                     if (i.customId === 'block_chat') {
                         await setChannelPermission(chat, audienceRole, false)
+                        send.log(podcast, "actions", "Canal bloqueado", `<@${interaction.user.id}> ha bloqueado el canal <#${podcast.chatChannelId}>`, interaction.guild)
                         await i.update({ content: 'Canal bloqueado.', components: [] });
                         collector.stop();
                     }
@@ -99,14 +103,14 @@ const podcastCommand = {
                         await interaction.editReply({
                             content: 'El tiempo para responder ha expirado.',
                             components: [
-                                new ActionRowBuilder().addComponents(selectMenu.setDisabled(true)),
-                                new ActionRowBuilder().addComponents(skipButton.setDisabled(true))
+                                new ActionRowBuilder().addComponents(blockbutton.setDisabled(true))
                             ]
                         });
                     }
                 });
 
                 break
+            case "resume":
             case "active":
                 var response = await prisma.podcast.update({
                     where: { id: podcastId },
@@ -116,6 +120,11 @@ const podcastCommand = {
                 })
                 if (!response || response.status != PodcastSatus.ACTIVE) return error(interaction)
                 await setChannelPermission(chat, audienceRole, true)
+                send.log(podcast, "status", `Podcast #${podcast.id} iniciado`, `<@${interaction.user.id}> ha ${action=="active"?"iniciado":"reanudado"} el podcast.`, interaction.guild)
+                .catch(()=>{});
+                send.log(podcast, "actions", "Canal desbloqueado", `<@${interaction.user.id}> ha desbloqueado el canal <#${podcast.chatChannelId}>`, interaction.guild)
+                .catch(()=>{});
+                podcast_times.set(podcast.id, 'active')
                 await interaction.reply({ content: "El podcast ha iniciado.", ephemeral: true })
                 break
             case "inactive":
@@ -127,6 +136,13 @@ const podcastCommand = {
                 })
                 if (!response || response.status != PodcastSatus.INACTIVE) return error(interaction)
                 await setChannelPermission(chat, audienceRole, false)
+                send.log(podcast, "status", `Podcast #${podcast.id} finalizado`, `<@${interaction.user.id}> ha finalizado el podcast`, interaction.guild)
+                .catch(()=>{});
+                send.log(podcast, "actions", "Canal bloqueado", `<@${interaction.user.id}> ha bloqueado el canal <#${podcast.chatChannelId}>`, interaction.guild)
+                .catch(()=>{});
+                const time = podcast_times.set(podcast.id, 'inactive')
+                send.log(podcast, "other", `Tiempo de podcast #${podcast.id}`, `El podcast ha finalizado con ${time} minutos de actividad`, interaction.guild)
+                .catch(()=>{});
                 await interaction.reply({ content: "El podcast ha finalizado.", ephemeral: true })
                 break
             default:

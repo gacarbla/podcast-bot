@@ -1,5 +1,6 @@
 // ready.js
 import prisma from '../database/prismaClient.js'; // Cliente de Prisma
+import { startMilestoneChecker } from '../utils/times.js';
 
 export const name = "ready"
 export const once = true;
@@ -26,4 +27,6 @@ export async function execute(client) {
             console.error(`Error al registrar el servidor ${guild.name} (${guild.id}):`, error);
         }
     }
+
+    startMilestoneChecker(client)
 }

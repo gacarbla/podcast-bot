@@ -1,4 +1,4 @@
-import { AutocompleteInteraction, Client } from "discord.js"
+import { AutocompleteInteraction, Client, PermissionFlagsBits } from "discord.js"
 import prisma, { PodcastSatus } from "../database/prismaClient.js"
 
 /**
@@ -12,7 +12,7 @@ async function handleAutocomplete(interaction, client) {
 
     let paused = { name: "Pause", value: "paused", name_localizations: { "es-ES": "Pausar", "es-419": "Pausar" } }
     let active = { name: "Start", value: "active", name_localizations: { "es-ES": "Iniciar", "es-419": "Iniciar" } }
-    let resume = { name: "Resume", value: "active", name_localizations: { "es-ES": "Reanudar", "es-419": "Reanudar" } }
+    let resume = { name: "Resume", value: "resume", name_localizations: { "es-ES": "Reanudar", "es-419": "Reanudar" } }
     let inactive = { name: "End", value: "inactive", name_localizations: { "es-ES": "Terminar", "es-419": "Terminar" } }
 
     if (focusedOption.name === 'podcast') {
@@ -22,7 +22,9 @@ async function handleAutocomplete(interaction, client) {
 
     if (focusedOption.name === 'action') {
         let podcast = interaction.options.getString('podcast');
-        if (podcast && !isNaN(podcast)) {
+        let podcastinfo = await getPodcastDB(podcast)
+        let podcasters = podcastinfo.podcasters.map(m=>m.discordId)
+        if (podcast && !isNaN(podcast) && (podcasters.includes(interaction.user.id) || interaction.member.permissions.has(PermissionFlagsBits.ManageMessages))) {
             let status = await getPodcastStatus(podcast, client)
             switch (status) {
                 case PodcastSatus.ACTIVE:
@@ -67,6 +69,25 @@ function getPodcasts(guildId) {
                         discordId: true
                     }
                 },
+            },
+        });
+
+        resolve(response)
+    })
+}
+
+function getPodcastDB(podcastId) {
+    return new Promise(async resolve => {
+        const response = await prisma.podcast.findUnique({
+            where: {
+                id: parseInt(podcastId)
+            },
+            select: {
+                podcasters: {
+                    select: {
+                        discordId: true
+                    }
+                }
             },
         });
 
